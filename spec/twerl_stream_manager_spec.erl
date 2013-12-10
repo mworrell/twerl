@@ -2,19 +2,19 @@
 -include_lib("espec.hrl").
 
 spec() ->
-     describe("stream manager", fun() ->
+     describe("twerl stream manager", fun() ->
         %% meck setup
         before_all(fun() ->
-            ok = meck:new(stream_client, [passthrough])
+            ok = meck:new(twerl_stream, [passthrough])
         end),
 
         after_each(fun() ->
-            ?assertEqual(true, meck:validate(stream_client)),
-            meck:reset(stream_client)
+            ?assertEqual(true, meck:validate(twerl_stream)),
+            meck:reset(twerl_stream)
         end),
 
         after_all(fun() ->
-            ok = meck:unload(stream_client)
+            ok = meck:unload(twerl_stream)
         end),
 
         %% manager setup
@@ -31,7 +31,7 @@ spec() ->
             it("starts streaming", fun() ->
                 Parent = self(),
 
-                meck:expect(stream_client, connect,
+                meck:expect(twerl_stream, connect,
                     % TODO check correct params are passed
                     fun(_, _, _, _) ->
                         Parent ! {self(), started},
@@ -51,13 +51,13 @@ spec() ->
                         ?assert(timeout)
                 end,
 
-                meck:wait(stream_client, connect, '_', 100)
+                meck:wait(twerl_stream, connect, '_', 100)
             end),
 
             it("doesn't start a second client if there is one running", fun() ->
                 Parent = self(),
 
-                meck:expect(stream_client, connect,
+                meck:expect(twerl_stream, connect,
                     fun(_, _, _, _) ->
                         Parent ! {self(), started},
                         receive _ -> {ok, terminate} end
@@ -77,28 +77,28 @@ spec() ->
                         ?assert(timeout)
                 end,
 
-                meck:wait(stream_client, connect, '_', 100)
+                meck:wait(twerl_stream, connect, '_', 100)
             end)
         end),
 
         describe("client errors", fun() ->
             it("handles unauthorised error", fun() ->
-                meck:expect(stream_client, connect,
+                meck:expect(twerl_stream, connect,
                     fun(_, _, _, _) -> {error, unauthorised} end
                 ),
 
                 twerl_stream_manager:start_stream(test_stream_manager),
-                meck:wait(stream_client, connect, '_', 100),
+                meck:wait(twerl_stream, connect, '_', 100),
                 ?assertEqual({error, unauthorised}, twerl_stream_manager:status(test_stream_manager))
             end),
 
             it("handles http errors", fun() ->
-                meck:expect(stream_client, connect,
+                meck:expect(twerl_stream, connect,
                     fun(_, _, _, _) -> {error, {http_error, something_went_wrong}} end
                 ),
 
                 twerl_stream_manager:start_stream(test_stream_manager),
-                meck:wait(stream_client, connect, '_', 100),
+                meck:wait(twerl_stream, connect, '_', 100),
                 ?assertEqual({error, {http_error, something_went_wrong}}, twerl_stream_manager:status(test_stream_manager))
             end)
         end),
@@ -107,7 +107,7 @@ spec() ->
             it("shuts down the client", fun() ->
                 Parent = self(),
 
-                meck:expect(stream_client, connect,
+                meck:expect(twerl_stream, connect,
                     % TODO check correct params are passed
                     fun(_, _, _, _) ->
                         Parent ! {self(), started},
@@ -130,7 +130,7 @@ spec() ->
                 ok = twerl_stream_manager:stop_stream(test_stream_manager),
 
                 % wait for child process to end
-                meck:wait(stream_client, connect, '_', 100),
+                meck:wait(twerl_stream, connect, '_', 100),
 
                 ?assertEqual(disconnected, twerl_stream_manager:status(test_stream_manager)),
 
@@ -143,20 +143,20 @@ spec() ->
             it("sets the params to track", fun() ->
                 Params = "params=true",
 
-                meck:expect(stream_client, connect,
+                meck:expect(twerl_stream, connect,
                     fun(_, _, _, _) -> {ok, terminate} end
                 ),
 
                 twerl_stream_manager:set_params(test_stream_manager, Params),
                 twerl_stream_manager:start_stream(test_stream_manager),
 
-                meck:wait(stream_client, connect, ['_', '_', Params, '_'], 100)
+                meck:wait(twerl_stream, connect, ['_', '_', Params, '_'], 100)
             end),
 
             it("restarts the client if connected", fun() ->
                 Parent = self(),
 
-                meck:expect(stream_client, connect,
+                meck:expect(twerl_stream, connect,
                     fun(_, _, _, _) ->
                         Parent ! {self(), started},
                         receive _ -> {ok, terminate} end
@@ -179,7 +179,7 @@ spec() ->
 
                 % child 1 will be terminated by the manager, and this call will
                 % return so we can wait for it through meck
-                meck:wait(stream_client, connect, ['_', '_', "", '_'], 100),
+                meck:wait(twerl_stream, connect, ['_', '_', "", '_'], 100),
 
                 % starting the client happens async, we need to wait for it
                 % to return to check it was called (meck thing)
@@ -190,7 +190,7 @@ spec() ->
                                 ?assert(timeout)
                         end,
 
-                meck:wait(stream_client, connect, ['_', '_', NewParams, '_'], 100),
+                meck:wait(twerl_stream, connect, ['_', '_', NewParams, '_'], 100),
 
                 % check two seperate processes were started
                 ?assertNotEqual(Child1, Child2)
@@ -201,20 +201,20 @@ spec() ->
             it("sets the auth", fun() ->
                 Auth = {basic, ["User1", "Pass1"]},
 
-                meck:expect(stream_client, connect,
+                meck:expect(twerl_stream, connect,
                     fun(_, _, _, _) -> {ok, terminate} end
                 ),
 
                 twerl_stream_manager:set_auth(test_stream_manager, Auth),
                 twerl_stream_manager:start_stream(test_stream_manager),
 
-                meck:wait(stream_client, connect, ['_', Auth, '_', '_'], 100)
+                meck:wait(twerl_stream, connect, ['_', Auth, '_', '_'], 100)
             end),
 
             it("restarts the client if connected", fun() ->
                 Parent = self(),
 
-                meck:expect(stream_client, connect,
+                meck:expect(twerl_stream, connect,
                     fun(_, _, _, _) ->
                         Parent ! {self(), started},
                         receive _ -> {ok, terminate} end
@@ -238,7 +238,7 @@ spec() ->
                 % child 1 will be terminated by the manager, and this call will
                 % return so we can wait for it through meck
                 OldAuth = {basic, ["", ""]},
-                meck:wait(stream_client, connect, ['_', OldAuth, '_', '_'], 100),
+                meck:wait(twerl_stream, connect, ['_', OldAuth, '_', '_'], 100),
 
                 % starting the client happens async, we need to wait for it
                 % to return to check it was called (meck thing)
@@ -249,7 +249,7 @@ spec() ->
                                 ?assert(timeout)
                         end,
 
-                meck:wait(stream_client, connect, ['_', NewAuth, '_', '_'], 100),
+                meck:wait(twerl_stream, connect, ['_', NewAuth, '_', '_'], 100),
 
                 % check two seperate processes were started
                 ?assertNotEqual(Child1, Child2)
@@ -271,7 +271,7 @@ spec() ->
                         end
                 end,
 
-                meck:expect(stream_client, connect,
+                meck:expect(twerl_stream, connect,
                     fun(_, _, _, Callback) ->
                         Parent ! {self(), started},
                         HandleConnection(HandleConnection, Callback)

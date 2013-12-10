@@ -230,7 +230,7 @@ client_connect(#state{auth = Auth, params = Params}) ->
       fun() ->
               proc_lib:init_ack(Parent, {ok, self()}),
               R = twerl_stream:connect(Endpoint, Auth, Params, Callback),
-              error_logger:error_msg("Twitter stream disconnect: ~p", [R]),
+              %%error_logger:error_msg("Twitter stream disconnect: ~p", [R]),
               case R of
                   {error, unauthorised} ->
                       %% Didn't connect, unauthorised

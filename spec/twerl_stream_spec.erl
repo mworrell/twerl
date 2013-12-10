@@ -7,7 +7,7 @@
 -define(TEST_AUTH, {basic, ["", ""]}).
 
 spec() ->
-   describe("stream client", fun() ->
+   describe("twerl stream", fun() ->
        describe("#connect", fun() ->
                describe("http client setup", fun() ->
                        before_all(fun() ->
@@ -185,13 +185,13 @@ spec() ->
                describe("connection handler", fun() ->
                        before_each(fun() ->
                                    catch meck:new(httpc, [unstick]),
-                                   catch meck:new(stream_client, [passthrough])
+                                   catch meck:new(twerl_stream, [passthrough])
                            end),
 
                        after_each(fun() ->
                                    ?assertEqual(true, meck:validate(httpc)),
-                                   ?assertEqual(true, meck:validate(stream_client)),
-                                   meck:unload(stream_client),
+                                   ?assertEqual(true, meck:validate(twerl_stream)),
+                                   meck:unload(twerl_stream),
                                    meck:unload(httpc)
                            end),
 
@@ -200,7 +200,7 @@ spec() ->
                                    Callback = 4567,
 
                                    meck:expect(httpc, request, fun(_, _, _, _) -> {ok, RequestId} end),
-                                   meck:expect(stream_client, handle_connection,
+                                   meck:expect(twerl_stream, handle_connection,
                                        fun(PassedCallback, PassedRequestId) ->
                                                ?assertEqual(Callback, PassedCallback),
                                                ?assertEqual(RequestId, PassedRequestId),

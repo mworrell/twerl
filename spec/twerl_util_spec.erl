@@ -2,34 +2,13 @@
 -include_lib("espec.hrl").
 
 spec() ->
-    describe("stream client util", fun() ->
+    describe("twerl util", fun() ->
             describe("#generate_headers", fun() ->
                     it("should generate Host and User-Agent headers", fun() ->
                                 Result = twerl_util:generate_headers(),
                                 Expected = [
                                     {"Host", "api.twitter.com"},
                                     {"User-Agent", "Twerl"}
-                                ],
-
-                                ?assertEqual(Expected, Result)
-                        end)
-                end),
-
-            describe("#generate_auth_headers", fun() ->
-                    it("should include default headers if none passed", fun() ->
-                                Result = twerl_util:generate_auth_headers("user", "pass"),
-                                Headers = twerl_util:generate_headers(),
-                                Expected = [
-                                    {"Authorization", "Basic " ++ binary_to_list(base64:encode("user" ++ ":" ++ "pass"))} | Headers
-                                ],
-
-                                ?assertEqual(Expected, Result)
-                        end),
-
-                    it("should allow custom headers to be passed", fun() ->
-                                Result = twerl_util:generate_auth_headers("user", "pass", []),
-                                Expected = [
-                                    {"Authorization", "Basic " ++ binary_to_list(base64:encode("user" ++ ":" ++ "pass"))}
                                 ],
 
                                 ?assertEqual(Expected, Result)
