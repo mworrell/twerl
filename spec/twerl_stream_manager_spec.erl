@@ -1,4 +1,4 @@
--module(stream_client_manager_spec).
+-module(twerl_stream_manager_spec).
 -include_lib("espec.hrl").
 
 spec() ->
@@ -19,12 +19,12 @@ spec() ->
 
         %% manager setup
         before_each(fun() ->
-            {ok, _} = stream_manager:start_link(test_stream_manager),
-            ?assertEqual(disconnected, stream_manager:status(test_stream_manager))
+            {ok, _} = twerl_stream_manager:start_link(test_stream_manager),
+            ?assertEqual(disconnected, twerl_stream_manager:status(test_stream_manager))
         end),
 
         after_each(fun() ->
-            stopped = stream_manager:stop(test_stream_manager)
+            stopped = twerl_stream_manager:stop(test_stream_manager)
         end),
 
         describe("#start_stream", fun() ->
@@ -39,8 +39,8 @@ spec() ->
                     end
                 ),
 
-                ok = stream_manager:start_stream(test_stream_manager),
-                ?assertEqual(connected, stream_manager:status(test_stream_manager)),
+                ok = twerl_stream_manager:start_stream(test_stream_manager),
+                ?assertEqual(connected, twerl_stream_manager:status(test_stream_manager)),
 
                 % starting the client happens async, we need to wait for it
                 % to return to check it was called (meck thing)
@@ -64,9 +64,9 @@ spec() ->
                     end
                 ),
 
-                ok = stream_manager:start_stream(test_stream_manager),
-                ok = stream_manager:start_stream(test_stream_manager),
-                ?assertEqual(connected, stream_manager:status(test_stream_manager)),
+                ok = twerl_stream_manager:start_stream(test_stream_manager),
+                ok = twerl_stream_manager:start_stream(test_stream_manager),
+                ?assertEqual(connected, twerl_stream_manager:status(test_stream_manager)),
 
                 % starting the client happens async, we need to wait for it
                 % to return to check it was called (meck thing)
@@ -87,9 +87,9 @@ spec() ->
                     fun(_, _, _, _) -> {error, unauthorised} end
                 ),
 
-                stream_manager:start_stream(test_stream_manager),
+                twerl_stream_manager:start_stream(test_stream_manager),
                 meck:wait(stream_client, connect, '_', 100),
-                ?assertEqual({error, unauthorised}, stream_manager:status(test_stream_manager))
+                ?assertEqual({error, unauthorised}, twerl_stream_manager:status(test_stream_manager))
             end),
 
             it("handles http errors", fun() ->
@@ -97,9 +97,9 @@ spec() ->
                     fun(_, _, _, _) -> {error, {http_error, something_went_wrong}} end
                 ),
 
-                stream_manager:start_stream(test_stream_manager),
+                twerl_stream_manager:start_stream(test_stream_manager),
                 meck:wait(stream_client, connect, '_', 100),
-                ?assertEqual({error, {http_error, something_went_wrong}}, stream_manager:status(test_stream_manager))
+                ?assertEqual({error, {http_error, something_went_wrong}}, twerl_stream_manager:status(test_stream_manager))
             end)
         end),
 
@@ -115,8 +115,8 @@ spec() ->
                     end
                 ),
 
-                ok = stream_manager:start_stream(test_stream_manager),
-                ?assertEqual(connected, stream_manager:status(test_stream_manager)),
+                ok = twerl_stream_manager:start_stream(test_stream_manager),
+                ?assertEqual(connected, twerl_stream_manager:status(test_stream_manager)),
 
                 % starting the client happens async, wait for it to start
                 % before terminating it
@@ -127,12 +127,12 @@ spec() ->
                                    ?assert(timeout)
                            end,
 
-                ok = stream_manager:stop_stream(test_stream_manager),
+                ok = twerl_stream_manager:stop_stream(test_stream_manager),
 
                 % wait for child process to end
                 meck:wait(stream_client, connect, '_', 100),
 
-                ?assertEqual(disconnected, stream_manager:status(test_stream_manager)),
+                ?assertEqual(disconnected, twerl_stream_manager:status(test_stream_manager)),
 
                 % check the child process is no longer alive
                 ?assertEqual(is_process_alive(ChildPid), false)
@@ -147,8 +147,8 @@ spec() ->
                     fun(_, _, _, _) -> {ok, terminate} end
                 ),
 
-                stream_manager:set_params(test_stream_manager, Params),
-                stream_manager:start_stream(test_stream_manager),
+                twerl_stream_manager:set_params(test_stream_manager, Params),
+                twerl_stream_manager:start_stream(test_stream_manager),
 
                 meck:wait(stream_client, connect, ['_', '_', Params, '_'], 100)
             end),
@@ -163,7 +163,7 @@ spec() ->
                     end
                 ),
 
-                ok = stream_manager:start_stream(test_stream_manager),
+                ok = twerl_stream_manager:start_stream(test_stream_manager),
 
                 % wait for child 1 to start, we only need this to get the pid
                 % at this point
@@ -175,7 +175,7 @@ spec() ->
                          end,
 
                 NewParams = "params=true",
-                stream_manager:set_params(test_stream_manager, NewParams),
+                twerl_stream_manager:set_params(test_stream_manager, NewParams),
 
                 % child 1 will be terminated by the manager, and this call will
                 % return so we can wait for it through meck
@@ -205,8 +205,8 @@ spec() ->
                     fun(_, _, _, _) -> {ok, terminate} end
                 ),
 
-                stream_manager:set_auth(test_stream_manager, Auth),
-                stream_manager:start_stream(test_stream_manager),
+                twerl_stream_manager:set_auth(test_stream_manager, Auth),
+                twerl_stream_manager:start_stream(test_stream_manager),
 
                 meck:wait(stream_client, connect, ['_', Auth, '_', '_'], 100)
             end),
@@ -221,7 +221,7 @@ spec() ->
                     end
                 ),
 
-                ok = stream_manager:start_stream(test_stream_manager),
+                ok = twerl_stream_manager:start_stream(test_stream_manager),
 
                 % wait for child 1 to start, we only need this to get the pid
                 % at this point
@@ -233,7 +233,7 @@ spec() ->
                          end,
 
                 NewAuth = {basic, ["User2", "Pass2"]},
-                stream_manager:set_auth(test_stream_manager, NewAuth),
+                twerl_stream_manager:set_auth(test_stream_manager, NewAuth),
 
                 % child 1 will be terminated by the manager, and this call will
                 % return so we can wait for it through meck
@@ -278,7 +278,7 @@ spec() ->
                     end
                 ),
 
-                ok = stream_manager:start_stream(test_stream_manager),
+                ok = twerl_stream_manager:start_stream(test_stream_manager),
 
                 % wait for child to start
                 Child = receive
@@ -308,7 +308,7 @@ spec() ->
                 end,
 
                 % set a callback
-                stream_manager:set_callback(test_stream_manager, Callback1),
+                twerl_stream_manager:set_callback(test_stream_manager, Callback1),
 
                 % send some more data
                 Child ! {data, data2},
@@ -322,7 +322,7 @@ spec() ->
                 end,
 
                 % set another callback
-                stream_manager:set_callback(test_stream_manager, Callback2),
+                twerl_stream_manager:set_callback(test_stream_manager, Callback2),
 
                 % send some more data
                 Child ! {data, data3},

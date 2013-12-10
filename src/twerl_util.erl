@@ -2,8 +2,6 @@
 -export([
           headers_for_auth/3,
           generate_headers/0,
-          generate_auth_headers/2,
-          generate_auth_headers/3,
           userids_to_follow/1,
           keywords_to_track/1,
           filter_url/0,
@@ -11,9 +9,6 @@
         ]).
 
 -spec headers_for_auth(term(), term(), list()) -> list() | {list(), string()}.
-headers_for_auth({basic, [User, Pass]}, _Endpoint, _Params) ->
-    generate_auth_headers(User, Pass);
-
 headers_for_auth({oauth, [ConsumerKey, ConsumerSecret, TokenKey, TokenSecret]}, _Endpoint, _Params) ->
     {[], oauth_params(ConsumerKey, ConsumerSecret, TokenKey, TokenSecret, _Endpoint, _Params)}.
 
@@ -22,17 +17,6 @@ generate_headers() ->
     [
         {"Host", "api.twitter.com"},
         {"User-Agent", "Twerl"}
-    ].
-
--spec generate_auth_headers(string(), string()) -> list().
-generate_auth_headers(User, Pass) ->
-    generate_auth_headers(User, Pass, generate_headers()).
-
--spec generate_auth_headers(string(), string(), list()) -> list().
-generate_auth_headers(User, Pass, Headers) ->
-    Basic = "Basic " ++ binary_to_list(base64:encode(User ++ ":" ++ Pass)),
-    [
-        {"Authorization", Basic} | Headers
     ].
 
 -spec userids_to_follow(list()) -> {ok, string()} | {error, reason}.
