@@ -106,35 +106,21 @@ handle_call({set_params, OldParams}, _From, State=#state{params=OldParams}) ->
     %% same, don't do anything
     {reply, ok, State};
 
-handle_call({set_params, Params}, _From, State = #state{client_pid=Pid}) ->
+handle_call({set_params, Params}, _From, State) ->
     %% change and see if we need to restart the client
-    NewPid = case Pid of
-                 undefined ->
-                     %% not started, nothing to do
-                     undefined;
-                 _ ->
-                     %% already started, restart
-                     ok = client_shutdown(State),
-                     client_connect(State#state{ params = Params })
-             end,
-    {reply, ok, State#state{ params = Params, client_pid = NewPid }};
+    ok = client_shutdown(State),
+    NewState = client_connect(State#state{params=Params}),
+    {reply, ok, NewState};
 
 handle_call({set_auth, OldAuth}, _From, State=#state{auth=OldAuth}) ->
     %% same, don't do anything
     {reply, ok, State};
 
-handle_call({set_auth, Auth}, _From, State = #state{client_pid = Pid}) ->
+handle_call({set_auth, Auth}, _From, State) ->
     %% different, change and see if we need to restart the client
-    NewPid = case Pid of
-                 undefined ->
-                    % not started, nothing to do
-                    undefined;
-                _ ->
-                    % already started, restart
-                    ok = client_shutdown(State),
-                    client_connect(State#state{ auth = Auth })
-            end,
-    {reply, ok, State#state{ auth = Auth, client_pid = NewPid }};
+    ok = client_shutdown(State),
+    NewState = client_connect(State#state{auth=Auth}),
+    {reply, ok, NewState};
 
 handle_call({set_callback, Callback}, _From, State) ->
     {reply, ok, State#state{ callback = Callback }};
@@ -171,24 +157,26 @@ handle_cast(_Msg, State) ->
 %%                                       {stop, Reason, State}
 %% Description: Handling all non call/cast messages
 %%--------------------------------------------------------------------
+handle_info({client_exit, Reason, Pid}, State) when Pid == State#state.client_pid ->
+    lager:warning("Stream exited: ~p", [Reason]),
+    NewState
+        = case Reason of
+              %% Handle messages from client process terminating
+              {ok, terminate} ->
+                  %% We closed the connection
+                  #state{client_pid=undefined, status=disconnected};
+              {ok, stream_end} ->
+                  client_reconnect(5000, undefined, State);
+              {error, R} ->
+                  client_reconnect(5000, {error, R}, State)
+          end,
+    {noreply, NewState};
 
-% we only care about messages from the current client, not old shutdown message
-handle_info({Pid, client_exit, Message}, State) when Pid == State#state.client_pid ->
-    {NewPid, Status} = case Message of
-                           %% Handle messages from client process terminating
-                           unauthorised ->
-                               {undefined, {error, unauthorised}};
-                           stream_end ->
-                               %% TODO reconnect
-                               {undefined, disconnected};
-                           terminate ->
-                               %% We closed the connection
-                               {undefined, disconnected};
-                           Error ->
-                               %% TODO maybe try reconnecting?
-                               {undefined, {error, Error}}
-                       end,
-    {noreply, State#state{status=Status, client_pid=NewPid}};
+handle_info(reconnect, State) ->
+    %% different, change and see if we need to restart the client
+    ok = client_shutdown(State),
+    NewState = client_connect(State),
+    {noreply, NewState};
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -214,7 +202,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 -spec client_connect(record()) -> pid().
-client_connect(#state{auth = Auth, params = Params}) ->
+client_connect(State=#state{auth = Auth, params = Params}) ->
     Parent = self(),
 
     % We don't use the callback from the state, as we want to be able to change
@@ -226,26 +214,15 @@ client_connect(#state{auth = Auth, params = Params}) ->
 
     Endpoint = {post, twerl_util:filter_url()},
 
-    proc_lib:spawn_link(
-      fun() ->
-              proc_lib:init_ack(Parent, {ok, self()}),
-              R = twerl_stream:connect(Endpoint, Auth, Params, Callback),
-              %%error_logger:error_msg("Twitter stream disconnect: ~p", [R]),
-              case R of
-                  {error, unauthorised} ->
-                      %% Didn't connect, unauthorised
-                      Parent ! {self(), client_exit, unauthorised};
-                  {ok, stream_end} ->
-                      %% Connection closed normally
-                      Parent ! {self(), client_exit, stream_end};
-                  {ok, terminate} ->
-                      %% Connection closed normally
-                      Parent ! {self(), client_exit, terminate};
-                  {error, Error} ->
-                      %% Connection closed due to error
-                      Parent ! {self(), client_exit, Error}
-              end
-      end).
+    Pid = proc_lib:spawn_link(
+            fun() ->
+                    proc_lib:init_ack(Parent, {ok, self()}),
+                    R = twerl_stream:connect(Endpoint, Auth, Params, Callback),
+                    error_logger:error_msg("Twitter stream disconnect: ~p", [R]),
+                    Parent ! {client_exit, R, self()}
+            end),
+    State#state{client_pid=Pid}.
+
 
 -spec client_shutdown(record()) -> ok.
 client_shutdown(#state{client_pid=undefined}) ->
@@ -255,3 +232,10 @@ client_shutdown(#state{client_pid=Pid}) ->
     %% terminate the client
     Pid ! terminate,
     ok.
+
+client_reconnect(After, Status, State) ->
+    lager:warning("Will reconnect stream, status = ~p", [Status]),
+    erlang:send_after(After, self(), reconnect),
+    State#state{client_pid=undefined, status=Status}.
+
+    

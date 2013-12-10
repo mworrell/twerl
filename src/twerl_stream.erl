@@ -14,7 +14,8 @@ connect({post, Url}, Auth, Params, Callback) ->
                           {H, L2} ->
                               {H, L2}
                       end,
-    case catch httpc:request(post, {Url, Headers, ?CONTENT_TYPE, Body}, [], [{sync, false}, {stream, self}, {keep_alive_timeout, 10000}]) of
+    httpc:set_options([{pipeline_timeout, 90000}]),
+    case catch httpc:request(post, {Url, Headers, ?CONTENT_TYPE, Body}, [], [{sync, false}, {stream, self}]) of
         {ok, RequestId} ->
             ?MODULE:handle_connection(Callback, RequestId);
         {error, Reason} ->
@@ -29,7 +30,8 @@ connect({get, BaseUrl}, Auth, Params, Callback) ->
               _ ->
                   BaseUrl ++ "?" ++ Params
           end,
-    case catch httpc:request(get, {Url, Headers}, [], [{sync, false}, {stream, self}, {keep_alive_timeout, 90000}]) of
+    httpc:set_options([{pipeline_timeout, 90000}]),
+    case catch httpc:request(get, {Url, Headers}, [], [{sync, false}, {stream, self}]) of
         {ok, RequestId} ->
             ?MODULE:handle_connection(Callback, RequestId);
 
@@ -38,7 +40,7 @@ connect({get, BaseUrl}, Auth, Params, Callback) ->
     end.
 
 % TODO maybe change {ok, stream_closed} to an error?
--spec handle_connection(term(), term()) -> {ok, terminate} | {ok, stream_closed} | {error, term()}.
+-spec handle_connection(term(), term()) -> {ok, terminate} | {ok, stream_end} | {error, term()}.
 handle_connection(Callback, RequestId) ->
     receive
         % stream opened
@@ -74,4 +76,6 @@ handle_connection(Callback, RequestId) ->
         % message send by us to close the connection
         terminate ->
             {ok, terminate}
+    after 90*1000 ->
+            {ok, stream_end}
     end.
