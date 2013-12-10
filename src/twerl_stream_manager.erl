@@ -1,4 +1,4 @@
--module(stream_manager).
+-module(twerl_stream_manager).
 -behaviour(gen_server).
 
 %% gen_server callbacks
@@ -91,7 +91,7 @@ handle_call(start_stream, _From, State=#state{client_pid=Pid}) ->
                      %% not started, start client
                      client_connect(State);
                  _ ->
-                     %% alrady started, ignore
+                     %% already started, ignore
                      Pid
              end,
     {reply, ok, State#state{client_pid=NewPid, status=connected }};
@@ -224,24 +224,28 @@ client_connect(#state{auth = Auth, params = Params}) ->
         gen_server:cast(Parent, {client_data, Data})
     end,
 
-    Endpoint = {post, stream_client_util:filter_url()},
+    Endpoint = {post, twerl_util:filter_url()},
 
-    spawn_link(fun() ->
-        case stream_client:connect(Endpoint, Auth, Params, Callback) of
-            {error, unauthorised} ->
-                % Didn't connect, unauthorised
-                Parent ! {self(), client_exit, unauthorised};
-            {ok, stream_end} ->
-                % Connection closed normally
-                Parent ! {self(), client_exit, stream_end};
-            {ok, terminate} ->
-                % Connection closed normally
-                Parent ! {self(), client_exit, terminate};
-            {error, Error} ->
-                % Connection closed due to error
-                Parent ! {self(), client_exit, Error}
-        end
-    end).
+    proc_lib:spawn_link(
+      fun() ->
+              proc_lib:init_ack(Parent, {ok, self()}),
+              R = twerl_stream:connect(Endpoint, Auth, Params, Callback),
+              error_logger:error_msg("Twitter stream disconnect: ~p", [R]),
+              case R of
+                  {error, unauthorised} ->
+                      %% Didn't connect, unauthorised
+                      Parent ! {self(), client_exit, unauthorised};
+                  {ok, stream_end} ->
+                      %% Connection closed normally
+                      Parent ! {self(), client_exit, stream_end};
+                  {ok, terminate} ->
+                      %% Connection closed normally
+                      Parent ! {self(), client_exit, terminate};
+                  {error, Error} ->
+                      %% Connection closed due to error
+                      Parent ! {self(), client_exit, Error}
+              end
+      end).
 
 -spec client_shutdown(record()) -> ok.
 client_shutdown(#state{client_pid=undefined}) ->

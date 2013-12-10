@@ -1,4 +1,4 @@
--module(stream_client).
+-module(twerl_stream).
 -export([
           connect/4,
           handle_connection/2
@@ -8,13 +8,13 @@
 
 -spec connect(string(), list(), string(), fun()) -> ok | {error, reason}.
 connect({post, Url}, Auth, Params, Callback) ->
-    {Headers, Body} = case stream_client_util:headers_for_auth(Auth, {post, Url}, Params) of
+    {Headers, Body} = case twerl_util:headers_for_auth(Auth, {post, Url}, Params) of
                         L when is_list(L) ->
                             {L, Params};
                           {H, L2} ->
                               {H, L2}
                       end,
-    case catch httpc:request(post, {Url, Headers, ?CONTENT_TYPE, Body}, [], [{sync, false}, {stream, self}]) of
+    case catch httpc:request(post, {Url, Headers, ?CONTENT_TYPE, Body}, [], [{sync, false}, {stream, self}, {keep_alive_timeout, 10000}]) of
         {ok, RequestId} ->
             ?MODULE:handle_connection(Callback, RequestId);
         {error, Reason} ->
@@ -22,14 +22,14 @@ connect({post, Url}, Auth, Params, Callback) ->
     end;
 
 connect({get, BaseUrl}, Auth, Params, Callback) ->
-    Headers = stream_client_util:headers_for_auth(Auth, {get, BaseUrl}, Params),
+    Headers = twerl_util:headers_for_auth(Auth, {get, BaseUrl}, Params),
     Url = case Params of
               "" ->
                   BaseUrl;
               _ ->
                   BaseUrl ++ "?" ++ Params
           end,
-    case catch httpc:request(get, {Url, Headers}, [], [{sync, false}, {stream, self}]) of
+    case catch httpc:request(get, {Url, Headers}, [], [{sync, false}, {stream, self}, {keep_alive_timeout, 90000}]) of
         {ok, RequestId} ->
             ?MODULE:handle_connection(Callback, RequestId);
 
@@ -48,7 +48,7 @@ handle_connection(Callback, RequestId) ->
         % stream received data
         {http, {RequestId, stream, Data}} ->
             spawn(fun() ->
-                DecodedData = stream_client_util:decode(Data),
+                DecodedData = twerl_util:decode(Data),
                 Callback(DecodedData)
             end),
             handle_connection(Callback, RequestId);
