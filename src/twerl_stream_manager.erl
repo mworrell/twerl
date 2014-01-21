@@ -116,6 +116,10 @@ handle_call({set_auth, OldAuth}, _From, State=#state{auth=OldAuth}) ->
     %% same, don't do anything
     {reply, ok, State};
 
+handle_call({set_auth, Auth}, _From, State=#state{client_pid=undefined}) ->
+    %% set auth without client connection
+    {reply, ok, State#state{ auth = Auth }};
+
 handle_call({set_auth, Auth}, _From, State) ->
     %% different, change and see if we need to restart the client
     ok = client_shutdown(State),
