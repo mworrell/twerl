@@ -13,6 +13,7 @@
           stop/1,
           start_stream/1,
           stop_stream/1,
+          set_endpoint/2,
           set_params/2,
           set_callback/2,
           set_auth/2,
@@ -23,6 +24,7 @@
         status = disconnected :: atom(),
         auth = {basic, ["", ""]} :: list(),
         params = "" :: string(),
+        endpoint :: tuple(),
         callback :: term(),
         client_pid :: pid()
     }).
@@ -49,6 +51,9 @@ stop_stream(ServerRef) ->
 set_params(ServerRef, Params) ->
     gen_server:call(ServerRef, {set_params, Params}).
 
+set_endpoint(ServerRef, Endpoint) ->
+    gen_server:call(ServerRef, {set_endpoint, Endpoint}).
+
 set_callback(ServerRef, Callback) ->
     gen_server:call(ServerRef, {set_callback, Callback}).
 
@@ -70,7 +75,8 @@ status(ServerRef) ->
 %% Description: Initiates the server
 %%--------------------------------------------------------------------
 init([]) ->
-    {ok, #state{}}.
+    Endpoint = {get, twerl_util:filter_url()},
+    {ok, #state{endpoint=Endpoint}}.
 
 %%--------------------------------------------------------------------
 %% Function: %% handle_call(Request, From, State) -> {reply, Reply, State} |
@@ -102,10 +108,24 @@ handle_call(stop_stream, _From, State) ->
     % and set the pid / status there
     {reply, ok, State};
 
+handle_call({set_endpoint, E}, _From, State=#state{params=E}) ->
+    %% same, don't do anything
+    {reply, ok, State};
+handle_call({set_endpoint, E}, _From, State=#state{client_pid=undefined}) ->
+    %% set endpoint without client connection
+    {reply, ok, State#state{ endpoint = E }};
+handle_call({set_endpoint, E}, _From, State) ->
+    %% change and restart the client
+    ok = client_shutdown(State),
+    NewState = client_connect(State#state{endpoint=E}),
+    {reply, ok, NewState};
+
 handle_call({set_params, OldParams}, _From, State=#state{params=OldParams}) ->
     %% same, don't do anything
     {reply, ok, State};
-
+handle_call({set_params, Params}, _From, State=#state{client_pid=undefined}) ->
+    %% set params without client connection
+    {reply, ok, State#state{ params = Params }};
 handle_call({set_params, Params}, _From, State) ->
     %% change and see if we need to restart the client
     ok = client_shutdown(State),
@@ -115,11 +135,9 @@ handle_call({set_params, Params}, _From, State) ->
 handle_call({set_auth, OldAuth}, _From, State=#state{auth=OldAuth}) ->
     %% same, don't do anything
     {reply, ok, State};
-
 handle_call({set_auth, Auth}, _From, State=#state{client_pid=undefined}) ->
     %% set auth without client connection
     {reply, ok, State#state{ auth = Auth }};
-
 handle_call({set_auth, Auth}, _From, State) ->
     %% different, change and see if we need to restart the client
     ok = client_shutdown(State),
@@ -206,7 +224,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 -spec client_connect(record()) -> pid().
-client_connect(State=#state{auth = Auth, params = Params}) ->
+client_connect(State=#state{auth = Auth, params = Params, endpoint = Endpoint}) ->
     Parent = self(),
 
     % We don't use the callback from the state, as we want to be able to change
@@ -215,8 +233,6 @@ client_connect(State=#state{auth = Auth, params = Params}) ->
     Callback = fun(Data) ->
         gen_server:cast(Parent, {client_data, Data})
     end,
-
-    Endpoint = {post, twerl_util:filter_url()},
 
     Pid = proc_lib:spawn_link(
             fun() ->
