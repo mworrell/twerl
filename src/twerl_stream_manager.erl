@@ -75,7 +75,7 @@ status(ServerRef) ->
 %% Description: Initiates the server
 %%--------------------------------------------------------------------
 init([]) ->
-    Endpoint = {get, twerl_util:filter_url()},
+    Endpoint = {post, twerl_util:filter_url()},
     {ok, #state{endpoint=Endpoint}}.
 
 %%--------------------------------------------------------------------
