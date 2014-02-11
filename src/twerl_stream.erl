@@ -14,6 +14,7 @@ connect({post, Url}, Auth, Params, Callback) ->
                           {H, L2} ->
                               {H, L2}
                       end,
+    lager:debug("twerl_stream - connecting to url with POST: ~p", [Url]),
     httpc:set_options([{pipeline_timeout, 90000}]),
     case catch httpc:request(post, {Url, Headers, ?CONTENT_TYPE, Body}, [], [{sync, false}, {stream, self}]) of
         {ok, RequestId} ->
@@ -30,6 +31,7 @@ connect({get, BaseUrl}, Auth, Params, Callback) ->
                               {H, L2}
                       end,
     Url = BaseUrl ++ "?" ++ UrlParams,
+    lager:debug("twerl_stream - connecting to url with GET: ~p", [Url]),
     httpc:set_options([{pipeline_timeout, 90000}]),
     case catch httpc:request(get, {Url, Headers}, [], [{sync, false}, {stream, self}]) of
         {ok, RequestId} ->
