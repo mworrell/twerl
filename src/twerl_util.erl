@@ -5,6 +5,7 @@
           userids_to_follow/1,
           keywords_to_track/1,
           filter_url/0,
+          user_stream_url/0,
           decode/1
         ]).
 
@@ -45,6 +46,10 @@ args_to_params(Method, [Current | Remaining], Acc) ->
 -spec filter_url() -> string().
 filter_url() ->
     "https://stream.twitter.com/1.1/statuses/filter.json".
+
+-spec user_stream_url() -> string().
+user_stream_url() ->
+    "https://userstream.twitter.com/1.1/user.json".
 
 -spec decode(binary()) -> list().
 decode(Data) ->
