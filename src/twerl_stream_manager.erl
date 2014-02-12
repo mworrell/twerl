@@ -250,7 +250,12 @@ client_shutdown(#state{client_pid=undefined}) ->
     ok;
 client_shutdown(#state{client_pid=Pid}) ->
     %% terminate the client
-    Pid ! terminate,
+    case is_pid(Pid) andalso is_process_alive(Pid) of
+        true ->
+            Pid ! terminate;
+        false ->
+            ignore
+    end,
     ok.
 
 client_reconnect(After, Status, State) ->
