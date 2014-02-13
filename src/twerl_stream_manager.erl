@@ -111,10 +111,10 @@ handle_call(stop_stream, _From, State) ->
 handle_call({set_endpoint, E}, _From, State=#state{params=E}) ->
     %% same, don't do anything
     {reply, ok, State};
-handle_call({set_endpoint, E}, _From, State=#state{client_pid=undefined}) ->
+handle_call({set_endpoint, {_,_}=E}, _From, State=#state{client_pid=undefined}) ->
     %% set endpoint without client connection
-    {reply, ok, State#state{ endpoint = E }};
-handle_call({set_endpoint, E}, _From, State) ->
+    {reply, ok, State#state{endpoint=E}};
+handle_call({set_endpoint, {_,_}=E}, _From, State) ->
     %% change and restart the client
     ok = client_shutdown(State),
     NewState = client_connect(State#state{endpoint=E}),
@@ -151,6 +151,7 @@ handle_call(status, _From, State = #state{status = Status}) ->
     {reply, Status, State};
 
 handle_call(_Request, _From, State) ->
+    lager:warning("Unknown call: ~p", [_Request]),
     {reply, ok, State}.
 
 %%--------------------------------------------------------------------
