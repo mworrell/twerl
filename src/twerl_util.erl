@@ -57,8 +57,14 @@ decode(Data) ->
         <<"\r\n">> ->
             [];
         _ ->
-            {Decoded} = jiffy:decode(Data),
-            Decoded
+            try
+                {Decoded} = jiffy:decode(Data),
+                Decoded
+            catch 
+                E:R ->
+                    lager:warning("JSON decode error: ~p:~p  - ~p", [E, R, Data]),
+                    []
+            end
     end.
 
 oauth_params(ConsumerKey, ConsumerSecret, TokenKey, TokenSecret, {Method, URL}, Params) ->
