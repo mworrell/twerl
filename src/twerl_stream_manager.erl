@@ -88,25 +88,19 @@ init([]) ->
 %% Description: Handling call messages
 %%--------------------------------------------------------------------
 handle_call(stop, _From, State) ->
-    ok = client_shutdown(State),
-    {stop, normal, stopped, State};
+    {stop, normal, stopped, client_shutdown(State)};
 
-handle_call(start_stream, _From, State=#state{client_pid=Pid}) ->
-    NewPid = case Pid of
-                 undefined ->
-                     %% not started, start client
-                     client_connect(State);
-                 _ ->
-                     %% already started, ignore
-                     Pid
-             end,
-    {reply, ok, State#state{client_pid=NewPid, status=connected }};
-
-handle_call(stop_stream, _From, State) ->
-    ok = client_shutdown(State),
-    % we leave the state as is, we will get a message when the client ends
-    % and set the pid / status there
+handle_call(start_stream, _From, State=#state{client_pid=undefined}) ->
+    {reply, ok, State#state{client_pid=client_connect(State), status=connected}};
+handle_call(start_stream, _From, State=#state{}) ->
+    %% ignore
     {reply, ok, State};
+
+handle_call(stop_stream, _From, State=#state{client_pid=undefined}) ->
+    %% ignore
+    {reply, ok, State};
+handle_call(stop_stream, _From, State) ->
+    {reply, ok, client_shutdown(State)};
 
 handle_call({set_endpoint, E}, _From, State=#state{params=E}) ->
     %% same, don't do anything
@@ -116,9 +110,9 @@ handle_call({set_endpoint, {_,_}=E}, _From, State=#state{client_pid=undefined}) 
     {reply, ok, State#state{endpoint=E}};
 handle_call({set_endpoint, {_,_}=E}, _From, State) ->
     %% change and restart the client
-    ok = client_shutdown(State),
-    NewState = client_connect(State#state{endpoint=E}),
-    {reply, ok, NewState};
+    State1 = client_shutdown(State),
+    State2 = client_connect(State1#state{endpoint=E}),
+    {reply, ok, State2};
 
 handle_call({set_params, OldParams}, _From, State=#state{params=OldParams}) ->
     %% same, don't do anything
@@ -128,9 +122,9 @@ handle_call({set_params, Params}, _From, State=#state{client_pid=undefined}) ->
     {reply, ok, State#state{ params = Params }};
 handle_call({set_params, Params}, _From, State) ->
     %% change and see if we need to restart the client
-    ok = client_shutdown(State),
-    NewState = client_connect(State#state{params=Params}),
-    {reply, ok, NewState};
+    State1 = client_shutdown(State),
+    State2 = client_connect(State1#state{params=Params}),
+    {reply, ok, State2};
 
 handle_call({set_auth, OldAuth}, _From, State=#state{auth=OldAuth}) ->
     %% same, don't do anything
@@ -140,9 +134,9 @@ handle_call({set_auth, Auth}, _From, State=#state{client_pid=undefined}) ->
     {reply, ok, State#state{ auth = Auth }};
 handle_call({set_auth, Auth}, _From, State) ->
     %% different, change and see if we need to restart the client
-    ok = client_shutdown(State),
-    NewState = client_connect(State#state{auth=Auth}),
-    {reply, ok, NewState};
+    State1 = client_shutdown(State),
+    State2 = client_connect(State1#state{auth=Auth}),
+    {reply, ok, State2};
 
 handle_call({set_callback, Callback}, _From, State) ->
     {reply, ok, State#state{ callback = Callback }};
@@ -197,9 +191,9 @@ handle_info({client_exit, Reason, Pid}, State) when Pid == State#state.client_pi
 
 handle_info(reconnect, State) ->
     %% different, change and see if we need to restart the client
-    ok = client_shutdown(State),
-    NewState = client_connect(State),
-    {noreply, NewState};
+    State1 = client_shutdown(State),
+    State2 = client_connect(State1),
+    {noreply, State2};
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -246,10 +240,10 @@ client_connect(State=#state{auth = Auth, params = Params, endpoint = Endpoint}) 
 
 
 -spec client_shutdown(record()) -> ok.
-client_shutdown(#state{client_pid=undefined}) ->
+client_shutdown(State=#state{client_pid=undefined}) ->
     %% not started, nothing to do
-    ok;
-client_shutdown(#state{client_pid=Pid}) ->
+    State;
+client_shutdown(State=#state{client_pid=Pid}) ->
     %% terminate the client
     case is_pid(Pid) andalso is_process_alive(Pid) of
         true ->
@@ -257,7 +251,7 @@ client_shutdown(#state{client_pid=Pid}) ->
         false ->
             ignore
     end,
-    ok.
+    State#state{client_pid=undefined}.
 
 client_reconnect(After, Status, State) ->
     lager:warning("Will reconnect stream, status = ~p", [Status]),
