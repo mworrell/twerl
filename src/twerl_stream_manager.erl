@@ -91,7 +91,7 @@ handle_call(stop, _From, State) ->
     {stop, normal, stopped, client_shutdown(State)};
 
 handle_call(start_stream, _From, State=#state{client_pid=undefined}) ->
-    {reply, ok, State#state{client_pid=client_connect(State), status=connected}};
+    {reply, ok, client_connect(State)};
 handle_call(start_stream, _From, State=#state{}) ->
     %% ignore
     {reply, ok, State};
@@ -175,7 +175,6 @@ handle_cast(_Msg, State) ->
 %% Description: Handling all non call/cast messages
 %%--------------------------------------------------------------------
 handle_info({client_exit, Reason, Pid}, State) when Pid == State#state.client_pid ->
-    lager:warning("Stream exited: ~p", [Reason]),
     NewState
         = case Reason of
               %% Handle messages from client process terminating
@@ -236,7 +235,8 @@ client_connect(State=#state{auth = Auth, params = Params, endpoint = Endpoint}) 
                     error_logger:error_msg("Twitter stream disconnect: ~p", [R]),
                     Parent ! {client_exit, R, self()}
             end),
-    State#state{client_pid=Pid}.
+    State#state{client_pid=Pid, status=connected}.
+
 
 
 -spec client_shutdown(record()) -> ok.
