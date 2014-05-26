@@ -1,12 +1,12 @@
 -module(twerl_util).
 -export([
-          headers_for_auth/3,
-          generate_headers/0,
-          userids_to_follow/1,
-          keywords_to_track/1,
-          filter_url/0,
-          user_stream_url/0,
-          decode/1
+         headers_for_auth/3,
+         generate_headers/0,
+         userids_to_follow/1,
+         keywords_to_track/1,
+         filter_url/0,
+         user_stream_url/0,
+         decode/1
         ]).
 
 -spec headers_for_auth(term(), term(), list()) -> list() | {list(), string()}.
@@ -16,8 +16,8 @@ headers_for_auth({oauth, [ConsumerKey, ConsumerSecret, TokenKey, TokenSecret]}, 
 -spec generate_headers() -> list().
 generate_headers() ->
     [
-        {"Host", "api.twitter.com"},
-        {"User-Agent", "Twerl"}
+     {"Host", "api.twitter.com"},
+     {"User-Agent", "Twerl"}
     ].
 
 -spec userids_to_follow(list()) -> {ok, string()} | {error, reason}.
@@ -53,18 +53,13 @@ user_stream_url() ->
 
 -spec decode(binary()) -> list().
 decode(Data) ->
-    case Data of
-        <<"\r\n">> ->
-            [];
-        _ ->
-            try
-                {Decoded} = jiffy:decode(Data),
-                Decoded
-            catch 
-                E:R ->
-                    lager:warning("JSON decode error: ~p:~p  - ~p", [E, R, Data]),
-                    []
-            end
+    try
+        {Decoded} = jiffy:decode(Data),
+        Decoded
+    catch 
+        E:R ->
+            lager:warning("JSON decode error: ~p:~p  - ~p", [E, R, Data]),
+            []
     end.
 
 oauth_params(ConsumerKey, ConsumerSecret, TokenKey, TokenSecret, {Method, URL}, Params) ->

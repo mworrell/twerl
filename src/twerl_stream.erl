@@ -4,6 +4,7 @@
         ]).
 
 -define(CONTENT_TYPE, "application/x-www-form-urlencoded").
+-define(SEP, <<"\r\n">>).
 
 -spec connect(string(), list(), string(), fun()) -> ok | {error, reason}.
 connect({post, Url}, Auth, Params, Callback) ->
@@ -78,17 +79,19 @@ handle_connection(Callback, RequestId, Buffer) ->
     end.
 
 
+handle_data(_Callback, ?SEP, Buffer) ->
+    Buffer;
 handle_data(Callback, Line, Buffer) ->
-    case binary:split(Line, <<"\r\n">>) of
+    case binary:split(Line, ?SEP) of
         [Part] ->
             [Part|Buffer];
         [End, Rest] ->
             spawn(fun() ->
                           JsonBin = iolist_to_binary(lists:reverse([End|Buffer])),
-                          case twerl_util:decode(JsonBin) of
+                          case JsonBin of
                               <<>> -> ignore;
-                              DecodedData -> 
-                                  Callback(DecodedData)
+                              _ -> 
+                                  Callback(twerl_util:decode(JsonBin))
                           end
                   end),
             case Rest of
