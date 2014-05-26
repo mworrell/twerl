@@ -1,7 +1,6 @@
 -module(twerl_stream).
 -export([
-          connect/4,
-          handle_connection/2
+          connect/4
         ]).
 
 -define(CONTENT_TYPE, "application/x-www-form-urlencoded").
@@ -18,7 +17,7 @@ connect({post, Url}, Auth, Params, Callback) ->
     httpc:set_options([{pipeline_timeout, 90000}]),
     case catch httpc:request(post, {Url, Headers, ?CONTENT_TYPE, Body}, [], [{sync, false}, {stream, self}]) of
         {ok, RequestId} ->
-            ?MODULE:handle_connection(Callback, RequestId);
+            handle_connection(Callback, RequestId, []);
         {error, Reason} ->
             {error, {http_error, Reason}}
     end;
@@ -35,26 +34,23 @@ connect({get, BaseUrl}, Auth, Params, Callback) ->
     httpc:set_options([{pipeline_timeout, 90000}]),
     case catch httpc:request(get, {Url, Headers}, [], [{sync, false}, {stream, self}]) of
         {ok, RequestId} ->
-            ?MODULE:handle_connection(Callback, RequestId);
+            handle_connection(Callback, RequestId, []);
         {error, Reason} ->
             {error, {http_error, Reason}}
     end.
 
 % TODO maybe change {ok, stream_closed} to an error?
--spec handle_connection(term(), term()) -> {ok, terminate} | {ok, stream_end} | {error, term()}.
-handle_connection(Callback, RequestId) ->
+-spec handle_connection(term(), term(), [binary()]) -> {ok, terminate} | {ok, stream_end} | {error, term()}.
+handle_connection(Callback, RequestId, Buffer) ->
     receive
         % stream opened
         {http, {RequestId, stream_start, _Headers}} ->
-            handle_connection(Callback, RequestId);
+            handle_connection(Callback, RequestId, Buffer);
 
         % stream received data
         {http, {RequestId, stream, Data}} ->
-            spawn(fun() ->
-                DecodedData = twerl_util:decode(Data),
-                Callback(DecodedData)
-            end),
-            handle_connection(Callback, RequestId);
+            NewBuffer = handle_data(Callback, Data, Buffer),
+            handle_connection(Callback, RequestId, NewBuffer);
 
         % stream closed
         {http, {RequestId, stream_end, _Headers}} ->
@@ -80,3 +76,21 @@ handle_connection(Callback, RequestId) ->
     after 90*1000 ->
             {ok, stream_end}
     end.
+
+
+handle_data(Callback, Line, Buffer) ->
+    case binary:split(Line, <<"\r\n">>) of
+        [Part] ->
+            [Part|Buffer];
+        [End, Rest] ->
+            spawn(fun() ->
+                          JsonBin = iolist_to_binary(lists:reverse([End|Buffer])),
+                          DecodedData = twerl_util:decode(JsonBin),
+                          Callback(DecodedData)
+                  end),
+            case Rest of
+                <<>> -> [];
+                _ -> [Rest]
+            end
+    end.
+
