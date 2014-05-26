@@ -85,8 +85,11 @@ handle_data(Callback, Line, Buffer) ->
         [End, Rest] ->
             spawn(fun() ->
                           JsonBin = iolist_to_binary(lists:reverse([End|Buffer])),
-                          DecodedData = twerl_util:decode(JsonBin),
-                          Callback(DecodedData)
+                          case twerl_util:decode(JsonBin) of
+                              <<>> -> ignore;
+                              DecodedData -> 
+                                  Callback(DecodedData)
+                          end
                   end),
             case Rest of
                 <<>> -> [];
