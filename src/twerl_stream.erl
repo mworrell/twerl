@@ -73,6 +73,7 @@ handle_connection(Callback, RequestId, Buffer) ->
 
         % message send by us to close the connection
         terminate ->
+            httpc:cancel_request(RequestId),
             {ok, terminate}
     after 90*1000 ->
             {ok, stream_end}
