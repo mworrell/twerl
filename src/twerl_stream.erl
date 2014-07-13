@@ -97,7 +97,7 @@ handle_data(Callback, Line, Buffer) ->
                   end),
             case Rest of
                 <<>> -> [];
-                _ -> [Rest]
+                _ -> handle_data(Callback, Rest, [])
             end
     end.
 
