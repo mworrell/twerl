@@ -59,7 +59,6 @@ decode(Data) ->
     catch 
         E:R ->
             lager:warning("JSON decode error: ~p:~p  - ~p", [E, R, Data]),
-            io:format("~n~n~n~p~n~n~n", [Data]),
             []
     end.
 
