@@ -175,25 +175,31 @@ handle_cast(_Msg, State) ->
 %% Description: Handling all non call/cast messages
 %%--------------------------------------------------------------------
 handle_info({client_exit, Reason, Pid}, State) when Pid == State#state.client_pid ->
+    State1 = State#state{client_pid=undefined, status=disconnected},
     NewState
         = case Reason of
               %% Handle messages from client process terminating
               {ok, terminate} ->
                   %% We closed the connection
-                  #state{client_pid=undefined, status=disconnected};
+                  State1;
               {ok, stream_end} ->
-                  client_reconnect(5000, undefined, State);
+                  client_reconnect({ok, stream_end}, State1);
+              {error, {unauthorized, _}} ->
+                  lager:warning("Twitter: stream is unauthorized, will not reconnect"),
+                  State1#state{status=unauthorized};
+              {error, {invalid_params, _}} ->
+                  lager:warning("Twitter: invalid parameters, will not reconnect"),
+                  State1#state{status=invalid_params};
               {error, R} ->
-                  client_reconnect(5000, {error, R}, State)
+                  client_reconnect({error, R}, State1)
           end,
     {noreply, NewState};
 
 handle_info(reconnect, State) ->
     %% different, change and see if we need to restart the client
-    State1 = client_shutdown(State),
-    State2 = client_connect(State1),
-    {noreply, State2};
-
+    State1 = client_connect(State),
+    {noreply, State1};
+    
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -218,6 +224,12 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 -spec client_connect(record()) -> pid().
+client_connect(#state{status = connected} = State) ->
+    State;
+client_connect(#state{status = terminating} = State) ->
+    lager:debug("Twitter: waiting for current streaming process to terminate."),
+    timer:send_after(1000, reconnect),
+    State;
 client_connect(State=#state{auth = Auth, params = Params, endpoint = Endpoint}) ->
     Parent = self(),
 
@@ -239,7 +251,7 @@ client_connect(State=#state{auth = Auth, params = Params, endpoint = Endpoint}) 
 
 
 
--spec client_shutdown(record()) -> ok.
+-spec client_shutdown(record()) -> record().
 client_shutdown(State=#state{client_pid=undefined}) ->
     %% not started, nothing to do
     State;
@@ -247,15 +259,24 @@ client_shutdown(State=#state{client_pid=Pid}) ->
     %% terminate the client
     case is_pid(Pid) andalso is_process_alive(Pid) of
         true ->
-            Pid ! terminate;
+            Pid ! terminate,
+            State#state{status=terminating};
         false ->
-            ignore
-    end,
-    State#state{client_pid=undefined}.
+            State#state{client_pid=undefined, status=disconnected}
+    end.
+
+client_reconnect({ok, Status}, State) ->
+    client_reconnect(5, Status, State);
+client_reconnect({error, {connection_limit, _} = Err}, State) ->
+    client_reconnect(5*60, Err, State);
+client_reconnect({error, {notfound, _} = Err}, State) ->
+    client_reconnect(15*60, Err, State);
+client_reconnect({error, Status}, State) ->
+    client_reconnect(5, Status, State).
 
 client_reconnect(After, Status, State) ->
-    lager:warning("Will reconnect stream, status = ~p", [Status]),
-    erlang:send_after(After, self(), reconnect),
-    State#state{client_pid=undefined, status=Status}.
+    lager:warning("Twitter: will reconnect stream in ~p secs, status = ~p", [After, Status]),
+    erlang:send_after(After * 1000, self(), reconnect),
+    State#state{client_pid=undefined}.
 
     
