@@ -223,7 +223,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
--spec client_connect(record()) -> pid().
+-spec client_connect(#state{}) -> pid().
 client_connect(#state{status = connected} = State) ->
     State;
 client_connect(#state{status = terminating} = State) ->
@@ -251,7 +251,7 @@ client_connect(State=#state{auth = Auth, params = Params, endpoint = Endpoint}) 
 
 
 
--spec client_shutdown(record()) -> record().
+-spec client_shutdown(#state{}) -> #state{}.
 client_shutdown(State=#state{client_pid=undefined}) ->
     %% not started, nothing to do
     State;
