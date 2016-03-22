@@ -10,6 +10,7 @@
 -export([
           start_link/0,
           start_link/1,
+          start_link/2,
           stop/1,
           start_stream/1,
           stop_stream/1,
@@ -26,18 +27,21 @@
         params = "" :: string(),
         endpoint :: tuple(),
         callback :: term(),
-        client_pid :: pid()
+        client_pid :: pid(),
+        mref :: reference()
     }).
 
 %%====================================================================
 %% api callbacks
 %%====================================================================
 start_link() ->
-    start_link(?MODULE).
+    start_link(?MODULE, []).
 
-start_link(GenServerName) ->
-    Args = [],
-    gen_server:start_link({local, GenServerName}, ?MODULE, Args, []).
+start_link(Options) when is_list(Options) ->
+    gen_server:start_link(?MODULE, [Options], []).
+
+start_link(GenServerName, Options) ->
+    gen_server:start_link({local, GenServerName}, ?MODULE, [Options], []).
 
 stop(ServerRef) ->
     gen_server:call(ServerRef, stop).
@@ -74,9 +78,19 @@ status(ServerRef) ->
 %%                         {stop, Reason}
 %% Description: Initiates the server
 %%--------------------------------------------------------------------
-init([]) ->
+init(Options) ->
+    process_flag(trap_exit, true),
     Endpoint = {post, twerl_util:filter_url()},
-    {ok, #state{endpoint=Endpoint}}.
+    Monitor = case proplists:get_value(monitor, Options) of
+                Pid when is_pid(Pid) ->
+                    erlang:monitor(process, Pid);
+                undefined ->
+                    undefined
+              end,
+    {ok, #state{
+        endpoint=Endpoint,
+        mref=Monitor
+    }}.
 
 %%--------------------------------------------------------------------
 %% Function: %% handle_call(Request, From, State) -> {reply, Reply, State} |
@@ -174,7 +188,7 @@ handle_cast(_Msg, State) ->
 %%                                       {stop, Reason, State}
 %% Description: Handling all non call/cast messages
 %%--------------------------------------------------------------------
-handle_info({client_exit, Reason, Pid}, State) when Pid == State#state.client_pid ->
+handle_info({client_exit, Reason, Pid}, #state{client_pid=Pid} = State) ->
     State1 = State#state{client_pid=undefined, status=disconnected},
     NewState
         = case Reason of
@@ -199,7 +213,14 @@ handle_info(reconnect, State) ->
     %% different, change and see if we need to restart the client
     State1 = client_connect(State),
     {noreply, State1};
-    
+
+handle_info({'EXIT', Pid, Reason}, #state{client_pid=Pid} = State) ->
+    handle_info({client_exit, {error, Reason}, Pid}, State);
+
+handle_info({'DOWN', MonitorRef, _Type, _Object, _Info}, #state{mref=MonitorRef} = State) ->
+    State1 = client_shutdown(State),
+    {stop, normal, State1#state{mref=undefined}};
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -210,7 +231,8 @@ handle_info(_Info, State) ->
 %% cleaning up. When it returns, the gen_server terminates with Reason.
 %% The return value is ignored.
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
+terminate(_Reason, State) ->
+    _ = client_shutdown(State),
     ok.
 
 %%--------------------------------------------------------------------

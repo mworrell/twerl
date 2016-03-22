@@ -6,53 +6,65 @@
 
 -define(CONTENT_TYPE, "application/x-www-form-urlencoded").
 -define(SEP, <<"\r\n">>).
+-define(HTTPC_PROFILE, ?MODULE).
 
 -spec connect(string(), list(), string(), fun()) -> ok | {error, reason}.
 connect({post, Url}, Auth, Params, Callback) ->
     {Headers, Body} = case twerl_util:headers_for_auth(Auth, {post, Url}, Params) of
-                        L when is_list(L) ->
-                            {L, Params};
-                          {H, L2} ->
-                              {H, L2}
+                        L when is_list(L) -> {L, Params};
+                        {H, L2} -> {H, L2}
                       end,
-    lager:debug("twerl_stream - connecting to url with POST: ~p", [Url]),
-    httpc:set_options([{pipeline_timeout, 90000}]),
-    case catch httpc:request(post, {Url, Headers, ?CONTENT_TYPE, Body}, [], [{sync, false}, {stream, self}]) of
-        {ok, RequestId} ->
-            handle_connection(Callback, RequestId, <<>>);
-        {error, Reason} ->
-            {error, {http_error, Reason}}
-    end;
-
+    connect_1(post, {Url, Headers, ?CONTENT_TYPE, Body}, Callback);
 connect({get, BaseUrl}, Auth, Params, Callback) ->
     {Headers, UrlParams} = case twerl_util:headers_for_auth(Auth, {get, BaseUrl}, Params) of
-                        L when is_list(L) ->
-                            {L, Params};
-                          {H, L2} ->
-                              {H, L2}
+                        L when is_list(L) -> {L, Params};
+                        {H, L2} -> {H, L2}
                       end,
     Url = BaseUrl ++ "?" ++ UrlParams,
-    lager:debug("twerl_stream - connecting to url with GET: ~p", [Url]),
-    httpc:set_options([{pipeline_timeout, 90000}]),
-    case catch httpc:request(get, {Url, Headers}, [], [{sync, false}, {stream, self}]) of
+    connect_1(get, {Url, Headers}, Callback).
+
+
+connect_1(Method, UrlArgs, Callback) ->
+    lager:debug("twerl_stream - connecting to url with ~p: ~p", [Method, UrlArgs]),
+    start_httpc_profile(),
+    httpc:set_options([
+            {pipeline_timeout, 90000},
+            {max_sessions, 100},
+            {cookies, disabled}
+        ], ?HTTPC_PROFILE),
+    case catch httpc:request(
+                        Method, 
+                        UrlArgs,
+                        [],
+                        [{sync, false}, {stream, self}],
+                        ?HTTPC_PROFILE)
+    of
         {ok, RequestId} ->
-            handle_connection(Callback, RequestId, <<>>);
+            FinalResult = handle_connection(Callback, RequestId, <<>>),
+            _ = httpc:cancel_request(RequestId, ?HTTPC_PROFILE),
+            FinalResult;
         {error, Reason} ->
             {error, {http_error, Reason}}
     end.
 
-% TODO maybe change {ok, stream_closed} to an error?
+start_httpc_profile() ->
+    case inets:start(httpc, [{profile, ?HTTPC_PROFILE}]) of
+        {ok, _Pid} -> ok;
+        {error, {already_started, _Pid}} -> ok
+    end.
+
+
 -spec handle_connection(term(), term(), binary()) -> {ok, terminate} | {ok, stream_end} | {error, term()}.
 handle_connection(Callback, RequestId, Buffer) ->
     receive
         % stream opened
         {http, {RequestId, stream_start, _Headers}} ->
-            twerl_stream:handle_connection(Callback, RequestId, Buffer);
+            ?MODULE:handle_connection(Callback, RequestId, Buffer);
 
         % stream received data
         {http, {RequestId, stream, Data}} ->
             NewBuffer = handle_data(Callback, Data, Buffer),
-            twerl_stream:handle_connection(Callback, RequestId, NewBuffer);
+            ?MODULE:handle_connection(Callback, RequestId, NewBuffer);
 
         % stream closed
         {http, {RequestId, stream_end, _Headers}} ->
@@ -87,15 +99,15 @@ handle_connection(Callback, RequestId, Buffer) ->
         % message send by us to close the connection
         terminate ->
             lager:debug("Twitter stream: terminate requested"),
-            httpc:cancel_request(RequestId),
             {ok, terminate};
 
         Other ->
-            lager:warning("Twitter stream: unknown message ~p", [Other]),
-            twerl_stream:handle_connection(Callback, RequestId, Buffer)
+            lager:error("Twitter stream: unknown message ~p", [Other]),
+            {error, unknown_message}
+            % twerl_stream:handle_connection(Callback, RequestId, Buffer)
 
     after 90*1000 ->
-            {ok, stream_end}
+        {ok, stream_end}
     end.
 
 
