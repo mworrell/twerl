@@ -27,11 +27,6 @@ connect({get, BaseUrl}, Auth, Params, Callback) ->
 connect_1(Method, UrlArgs, Callback) ->
     lager:debug("twerl_stream - connecting to url with ~p: ~p", [Method, UrlArgs]),
     start_httpc_profile(),
-    httpc:set_options([
-            {pipeline_timeout, 90000},
-            {max_sessions, 100},
-            {cookies, disabled}
-        ], ?HTTPC_PROFILE),
     case catch httpc:request(
                         Method, 
                         UrlArgs,
@@ -49,9 +44,33 @@ connect_1(Method, UrlArgs, Callback) ->
 
 start_httpc_profile() ->
     case inets:start(httpc, [{profile, ?HTTPC_PROFILE}]) of
-        {ok, _Pid} -> ok;
-        {error, {already_started, _Pid}} -> ok
+        {ok, _Pid} ->
+            httpc:set_options([
+                    {pipeline_timeout, 90000},
+                    {max_sessions, 100},
+                    {cookies, disabled}
+                ], ?HTTPC_PROFILE),
+            ok;
+        {error, {already_started, _Pid}} ->
+            cleanup_sessions(),
+            ok
     end.
+
+% httpc can leave sessions with dead handler processes in the session table.
+cleanup_sessions() ->
+    {Sessions, _, _} = httpc:which_sessions(twerl_stream),
+    % A session looks like: 
+    % {session,{{"stream.twitter.com",443},<0.6468.4>},false,https,undefined,undefined,1,pipeline,false}
+    lists:foreach(
+        fun(Session) ->
+            Id = element(2, Session),
+            HandlerPid = element(2, Id),
+            case is_process_alive(HandlerPid) of
+                true -> ok;
+                false -> httpc_manager:delete_session(Id, httpc:profile_name(twerl_stream))
+            end
+        end,
+        Sessions).
 
 
 -spec handle_connection(term(), term(), binary()) -> {ok, terminate} | {ok, stream_end} | {error, term()}.
